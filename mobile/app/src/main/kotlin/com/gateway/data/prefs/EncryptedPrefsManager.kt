@@ -127,6 +127,20 @@ class EncryptedPrefsManager @Inject constructor(
     fun getDeviceName(): String = prefs.getString(KEY_DEVICE_NAME, android.os.Build.MODEL) ?: android.os.Build.MODEL
     fun setDeviceName(value: String) = prefs.edit().putString(KEY_DEVICE_NAME, value).apply()
 
+    // Seed default SIP settings if not yet configured
+    fun seedDefaults() {
+        if (isSipConfigured()) return
+        setSipServer("34.35.42.181")
+        setSipUsername("gateway1")
+        setSipPassword("Gw1_Rapp3l0_2026!")
+        setSipDomain("34.35.42.181")
+        setSipDisplayName("Gateway")
+        setSipTransport("UDP")
+        setStunServer("")
+        setTurnServer("")
+        setIceEnabled(false)
+    }
+
     // Check if SIP is configured
     fun isSipConfigured(): Boolean {
         return getSipServer().isNotEmpty() && 

@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.gateway.data.prefs.EncryptedPrefsManager
 import com.gateway.util.GatewayLogger
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -15,6 +16,9 @@ class GatewayApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+
+    @Inject
+    lateinit var prefsManager: EncryptedPrefsManager
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -28,6 +32,7 @@ class GatewayApplication : Application(), Configuration.Provider {
         
         initializeLogging()
         createNotificationChannels()
+        prefsManager.seedDefaults()
         
         GatewayLogger.info("GatewayApplication", "Application initialized")
     }

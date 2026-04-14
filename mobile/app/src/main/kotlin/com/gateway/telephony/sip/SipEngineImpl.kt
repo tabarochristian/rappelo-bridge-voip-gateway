@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.pjsip.pjsua2.*
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +26,14 @@ class SipEngineImpl @Inject constructor(
 ) : SipEngine {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // Single-threaded dispatcher for all PJSIP operations.
+    // PJSIP requires threads to be registered via pj_thread_register();
+    // by confining every call to one thread we register it once and avoid crashes.
+    private val pjDispatcher = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "pjsip-thread").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+    private var pjThreadRegistered = false
 
     private val _registrationState = MutableStateFlow<SipRegistrationState>(SipRegistrationState.Unregistered)
     override val registrationState: StateFlow<SipRegistrationState> = _registrationState.asStateFlow()
@@ -43,7 +53,7 @@ class SipEngineImpl @Inject constructor(
     private var registrationRetryCount = 0
     private val maxRegistrationRetries = 10
 
-    override suspend fun initialize() = withContext(Dispatchers.Default) {
+    override suspend fun initialize() = withContext(pjDispatcher) {
         if (isInitialized) {
             GatewayLogger.warn(TAG, "SIP engine already initialized")
             return@withContext
@@ -85,6 +95,12 @@ class SipEngineImpl @Inject constructor(
 
             // Start endpoint
             endpoint?.libStart()
+
+            // Register this dedicated thread with PJSIP
+            if (!pjThreadRegistered) {
+                endpoint?.libRegisterThread(Thread.currentThread().name)
+                pjThreadRegistered = true
+            }
 
             isInitialized = true
             GatewayLogger.info(TAG, "PJSIP initialized successfully")
@@ -166,7 +182,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun shutdown() = withContext(Dispatchers.Default) {
+    override suspend fun shutdown() = withContext(pjDispatcher) {
         if (!isInitialized) return@withContext
 
         try {
@@ -215,7 +231,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun registerAccount() = withContext(Dispatchers.Default) {
+    override suspend fun registerAccount() = withContext(pjDispatcher) {
         if (!isInitialized) {
             GatewayLogger.error(TAG, "SIP engine not initialized")
             return@withContext
@@ -305,7 +321,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun unregisterAccount(): Unit = withContext(Dispatchers.Default) {
+    override suspend fun unregisterAccount(): Unit = withContext(pjDispatcher) {
         sipAccount?.let {
             try {
                 it.setRegistration(false)
@@ -317,7 +333,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun makeCall(sipUri: String): Int? = withContext(Dispatchers.Default) {
+    override suspend fun makeCall(sipUri: String): Int? = withContext(pjDispatcher) {
         if (!isInitialized || sipAccount == null) {
             GatewayLogger.error(TAG, "Cannot make call - not initialized")
             return@withContext null
@@ -345,7 +361,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun answerCall(callId: Int): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun answerCall(callId: Int): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -365,7 +381,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun rejectCall(callId: Int, code: Int): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun rejectCall(callId: Int, code: Int): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -388,7 +404,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun hangupCall(callId: Int): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun hangupCall(callId: Int): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -410,7 +426,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun holdCall(callId: Int): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun holdCall(callId: Int): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -428,7 +444,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun resumeCall(callId: Int): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun resumeCall(callId: Int): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -448,7 +464,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun sendDtmf(callId: Int, digits: String) = withContext(Dispatchers.Default) {
+    override suspend fun sendDtmf(callId: Int, digits: String) = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")
@@ -463,7 +479,7 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override suspend fun transferCall(callId: Int, targetUri: String): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun transferCall(callId: Int, targetUri: String): Boolean = withContext(pjDispatcher) {
         val call = activeCalls[callId]
         if (call == null) {
             GatewayLogger.warn(TAG, "Call $callId not found")

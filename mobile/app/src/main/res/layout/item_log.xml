@@ -12,7 +12,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textSize="10sp"
-        android:textColor="@color/text_secondary"
+        android:textColor="@android:color/white"
         android:fontFamily="monospace"
         tools:text="12:34:56.789" />
 
@@ -35,7 +35,7 @@
         android:layout_weight="1"
         android:layout_marginStart="8dp"
         android:textSize="11sp"
-        android:textColor="@color/text_primary"
+        android:textColor="@android:color/white"
         android:fontFamily="monospace"
         android:maxLines="3"
         android:ellipsize="end"
