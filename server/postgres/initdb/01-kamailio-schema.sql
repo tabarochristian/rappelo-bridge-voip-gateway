@@ -163,6 +163,21 @@ CREATE TABLE IF NOT EXISTS domain (
 INSERT INTO version (table_name, table_version) VALUES ('domain', 2) ON CONFLICT DO NOTHING;
 
 -- ========================================
+-- DOMAIN_ATTRS TABLE (required by domain module)
+-- ========================================
+CREATE TABLE IF NOT EXISTS domain_attrs (
+    id SERIAL PRIMARY KEY,
+    did VARCHAR(64) NOT NULL DEFAULT '',
+    name VARCHAR(32) NOT NULL DEFAULT '',
+    type INTEGER NOT NULL DEFAULT 0,
+    value VARCHAR(255) NOT NULL DEFAULT '',
+    last_modified TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON domain_attrs (did);
+
+INSERT INTO version (table_name, table_version) VALUES ('domain_attrs', 1) ON CONFLICT DO NOTHING;
+
+-- ========================================
 -- HTABLE for IP ban (pike)
 -- ========================================
 CREATE TABLE IF NOT EXISTS htable (
