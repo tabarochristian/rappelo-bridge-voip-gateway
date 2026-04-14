@@ -55,4 +55,26 @@
     <string name="cd_status_indicator">Status indicator</string>
     <string name="cd_start_service">Start gateway service</string>
     <string name="cd_stop_service">Stop gateway service</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_sip">SIP Account</string>
+    <string name="settings_sip_server">SIP Server</string>
+    <string name="settings_sip_server_hint">IP address or hostname</string>
+    <string name="settings_sip_username">Username</string>
+    <string name="settings_sip_password">Password</string>
+    <string name="settings_sip_domain">SIP Domain</string>
+    <string name="settings_sip_domain_hint">Defaults to server address</string>
+    <string name="settings_sip_display_name">Display Name</string>
+    <string name="settings_section_nat">NAT Traversal (STUN/TURN)</string>
+    <string name="settings_stun_server">STUN Server</string>
+    <string name="settings_turn_server">TURN Server</string>
+    <string name="settings_turn_server_hint">host:port (e.g. turn.example.com:3478)</string>
+    <string name="settings_turn_username">TURN Username</string>
+    <string name="settings_turn_password">TURN Password</string>
+    <string name="settings_ice_enabled">Enable ICE</string>
+    <string name="settings_section_transport">SIP Transport</string>
+    <string name="settings_save">Save Settings</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="settings_error_required">Server, username, and password are required</string>
 </resources>

@@ -23,7 +23,7 @@ android {
 
         // Default API configuration - override via local.properties
         buildConfigField("String", "API_BASE_URL", "\"https://api.gateway.local/\"")
-        buildConfigField("String", "DEFAULT_STUN_SERVER", "\"stun.l.google.com:19302\"")
+        buildConfigField("String", "DEFAULT_STUN_SERVER", "\"34.35.42.181:3478\"")
         buildConfigField("int", "LOCAL_HTTP_PORT", "8080")
         buildConfigField("int", "COMMAND_POLL_INTERVAL_MS", "5000")
         buildConfigField("int", "MAX_QUEUE_SIZE", "5")
