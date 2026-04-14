@@ -316,8 +316,9 @@ class SipEngineImpl @Inject constructor(
                 accConfig.natConfig.turnPassword = prefsManager.getTurnPassword()
             }
 
-            // Media config
-            accConfig.mediaConfig.srtpUse = pjmedia_srtp_use.PJMEDIA_SRTP_OPTIONAL
+            // Media config - use DISABLED since transport is plain UDP (not TLS)
+            // PJSIP_SRTP_OPTIONAL rejects inbound RTP/AVP offers with PJSIP_ESESSIONINSECURE
+            accConfig.mediaConfig.srtpUse = pjmedia_srtp_use.PJMEDIA_SRTP_DISABLED
 
             // Create account
             sipAccount = GatewaySipAccount(this@SipEngineImpl)
