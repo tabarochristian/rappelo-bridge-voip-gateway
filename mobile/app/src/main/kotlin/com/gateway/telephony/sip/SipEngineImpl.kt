@@ -550,9 +550,17 @@ class SipEngineImpl @Inject constructor(
 
     internal fun onIncomingCall(call: GatewaySipCall, info: OnIncomingCallParam) {
         val callId = call.id
-        val remoteUri = info.rdata.srcAddress
+        val callInfo = call.info
+        val remoteUri = callInfo.remoteUri       // From header (caller)
+        val localUri = callInfo.localUri         // To header
 
-        GatewayLogger.info(TAG, "Incoming SIP call from $remoteUri, callId: $callId")
+        // Extract the Request-URI from the raw INVITE message.
+        // The R-URI contains the dialed number (e.g. sip:+243815742718@...)
+        // after Kamailio's GATEWAY_BRIDGE route rewrites it.
+        val wholeMsg = info.rdata.wholeMsg
+        val requestUri = Regex("""^INVITE\s+(sip:\S+)""").find(wholeMsg)?.groupValues?.getOrNull(1) ?: localUri
+
+        GatewayLogger.info(TAG, "Incoming SIP call callId=$callId from=$remoteUri ruri=$requestUri")
 
         activeCalls[callId] = call
         _activeCallCount.value = activeCalls.size
@@ -567,7 +575,8 @@ class SipEngineImpl @Inject constructor(
             GatewayLogger.error(TAG, "Failed to send 180 Ringing", e)
         }
 
-        callListener?.onIncomingCall(callId, remoteUri)
+        // Pass the Request-URI so CallBridge can extract the target phone number
+        callListener?.onIncomingCall(callId, requestUri)
     }
 
     internal fun onCallState(call: GatewaySipCall, info: OnCallStateParam) {
