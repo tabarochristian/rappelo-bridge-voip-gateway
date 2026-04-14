@@ -21,4 +21,9 @@ if [ -n "$PUBLIC_IP" ]; then
 fi
 
 echo "Starting RTPEngine..."
-exec rtpengine "${ARGS[@]}" --foreground --table=-1
+# Binary name varies by package: rtpengine or rtpengine-daemon
+if command -v rtpengine &>/dev/null; then
+    exec rtpengine "${ARGS[@]}" --foreground --table=-1
+else
+    exec rtpengine-daemon "${ARGS[@]}" --foreground --table=-1
+fi

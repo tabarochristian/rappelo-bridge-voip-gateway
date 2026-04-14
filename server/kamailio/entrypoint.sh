@@ -8,6 +8,15 @@ until nc -z postgres 5432; do
 done
 echo "PostgreSQL is ready."
 
+# Fix module path for current architecture
+ARCH=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+case "$ARCH" in
+    amd64)  MPATH="/usr/lib/x86_64-linux-gnu/kamailio/modules/" ;;
+    arm64)  MPATH="/usr/lib/aarch64-linux-gnu/kamailio/modules/" ;;
+    *)      MPATH="/usr/lib/$(uname -m)-linux-gnu/kamailio/modules/" ;;
+esac
+sed -i "s|mpath=.*|mpath=\"${MPATH}\"|" /etc/kamailio/kamailio.cfg
+
 # Substitute environment variables in config
 sed -i "s/KAMAILIO_DB_USER/${KAMAILIO_DB_USER:-kamailio}/g" /etc/kamailio/kamailio.cfg
 sed -i "s/KAMAILIO_DB_PASSWORD/${KAMAILIO_DB_PASSWORD:-kamailio}/g" /etc/kamailio/kamailio.cfg

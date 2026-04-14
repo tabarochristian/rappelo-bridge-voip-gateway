@@ -1,7 +1,14 @@
-FROM kamailio/kamailio-ci:5.8-bookworm
+FROM debian:bookworm-slim
 
-# Install PostgreSQL client module and required modules
+# Install Kamailio 5.7 from official repo (latest stable in bookworm)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg curl ca-certificates \
+    && curl -fsSL https://deb.kamailio.org/kamailiodebkey.gpg \
+       | gpg --dearmor -o /usr/share/keyrings/kamailio.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/kamailio.gpg] http://deb.kamailio.org/kamailio57 bookworm main" \
+       > /etc/apt/sources.list.d/kamailio.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    kamailio \
     kamailio-postgres-modules \
     kamailio-extra-modules \
     kamailio-tls-modules \
@@ -11,7 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create runtime directories
-RUN mkdir -p /run/kamailio && chown kamailio:kamailio /run/kamailio
+RUN mkdir -p /run/kamailio \
+    && adduser --system --group --no-create-home kamailio || true \
+    && chown kamailio:kamailio /run/kamailio
 
 # Copy configuration
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
