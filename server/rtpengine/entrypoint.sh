@@ -1,8 +1,21 @@
 #!/bin/bash
 set -e
 
+# Auto-detect the container's actual IP (0.0.0.0 is rejected by newer rtpengine)
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+echo "Detected local IP: ${LOCAL_IP}"
+
+# Build interface specification
+if [ -n "$PUBLIC_IP" ]; then
+    # NAT mode: listen on local IP, advertise public IP
+    IFACE="${LOCAL_IP}!${PUBLIC_IP}"
+    echo "NAT mode: ${IFACE}"
+else
+    IFACE="${LOCAL_IP}"
+fi
+
 ARGS=(
-    --interface="internal/0.0.0.0"
+    --interface="${IFACE}"
     --listen-ng="0.0.0.0:22222"
     --port-min=30000
     --port-max=30100
@@ -14,11 +27,6 @@ ARGS=(
     --no-fallback
     --tos=184
 )
-
-# If PUBLIC_IP is set, use it for external media relay
-if [ -n "$PUBLIC_IP" ]; then
-    ARGS+=(--interface="external/${PUBLIC_IP}")
-fi
 
 echo "Starting RTPEngine..."
 # Binary name varies by package: rtpengine or rtpengine-daemon
