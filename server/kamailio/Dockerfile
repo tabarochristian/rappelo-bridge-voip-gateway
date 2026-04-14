@@ -22,7 +22,8 @@ RUN mkdir -p /run/kamailio \
     && adduser --system --group --no-create-home kamailio || true \
     && chown kamailio:kamailio /run/kamailio
 
-# Copy configuration
+# Copy configuration (keep .orig as pristine template for entrypoint)
+COPY kamailio.cfg /etc/kamailio/kamailio.cfg.orig
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
 COPY tls.cfg /etc/kamailio/tls.cfg
 

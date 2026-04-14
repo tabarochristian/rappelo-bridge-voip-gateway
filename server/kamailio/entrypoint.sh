@@ -8,6 +8,10 @@ until nc -z postgres 5432; do
 done
 echo "PostgreSQL is ready."
 
+# Always work from a fresh copy of the config to avoid
+# duplicate defines on container restart
+cp /etc/kamailio/kamailio.cfg.orig /etc/kamailio/kamailio.cfg
+
 # Fix module path for current architecture
 ARCH=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
 case "$ARCH" in

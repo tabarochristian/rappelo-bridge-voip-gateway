@@ -2,7 +2,7 @@
 set -e
 
 ARGS=(
-    --interface="0.0.0.0"
+    --interface="internal/0.0.0.0"
     --listen-ng="0.0.0.0:22222"
     --port-min=30000
     --port-max=30100
@@ -17,7 +17,7 @@ ARGS=(
 
 # If PUBLIC_IP is set, use it for external media relay
 if [ -n "$PUBLIC_IP" ]; then
-    ARGS+=(--interface="pub/${PUBLIC_IP}")
+    ARGS+=(--interface="external/${PUBLIC_IP}")
 fi
 
 echo "Starting RTPEngine..."
