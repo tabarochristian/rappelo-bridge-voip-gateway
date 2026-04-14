@@ -95,6 +95,20 @@ CREATE INDEX ON dialog (hash_entry, hash_id);
 INSERT INTO version (table_name, table_version) VALUES ('dialog', 7) ON CONFLICT DO NOTHING;
 
 -- ========================================
+-- DIALOG_VARS TABLE (required by dialog module)
+-- ========================================
+CREATE TABLE IF NOT EXISTS dialog_vars (
+    id SERIAL PRIMARY KEY,
+    hash_entry INTEGER NOT NULL,
+    hash_id INTEGER NOT NULL,
+    dialog_key VARCHAR(128) NOT NULL,
+    dialog_value VARCHAR(512) NOT NULL
+);
+CREATE INDEX ON dialog_vars (hash_entry, hash_id);
+
+INSERT INTO version (table_name, table_version) VALUES ('dialog_vars', 1) ON CONFLICT DO NOTHING;
+
+-- ========================================
 -- ACC TABLE (call accounting / CDR)
 -- ========================================
 CREATE TABLE IF NOT EXISTS acc (

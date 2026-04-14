@@ -24,6 +24,7 @@ services:
       POSTGRES_DB: ${KAMAILIO_DB_NAME:-kamailio}
       POSTGRES_USER: ${KAMAILIO_DB_USER:-kamailio}
       POSTGRES_PASSWORD: ${KAMAILIO_DB_PASSWORD:-kamailio-secret-change-me}
+      SIP_DOMAIN: ${SIP_DOMAIN:-sip.rappelo.local}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./server/postgres/initdb:/docker-entrypoint-initdb.d:ro

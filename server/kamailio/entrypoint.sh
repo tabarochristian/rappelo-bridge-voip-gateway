@@ -27,10 +27,11 @@ sed -i "s/KAMAILIO_DB_PASSWORD/${KAMAILIO_DB_PASSWORD:-kamailio}/g" /etc/kamaili
 sed -i "s/KAMAILIO_DB_NAME/${KAMAILIO_DB_NAME:-kamailio}/g" /etc/kamailio/kamailio.cfg
 sed -i "s/KAMAILIO_SIP_DOMAIN/${SIP_DOMAIN:-sip.rappelo.local}/g" /etc/kamailio/kamailio.cfg
 
-# Handle advertised address
+# Handle advertised address (add advertise to listen directives)
 if [ -n "$PUBLIC_IP" ]; then
-    sed -i "s/#!ifdef WITH_ADVERTISED_ADDRESS/#!define WITH_ADVERTISED_ADDRESS\n#!ifdef WITH_ADVERTISED_ADDRESS/" /etc/kamailio/kamailio.cfg
-    sed -i "s/ADVERTISED_ADDRESS/${PUBLIC_IP}/g" /etc/kamailio/kamailio.cfg
+    sed -i "s|listen=udp:0.0.0.0:5060$|listen=udp:0.0.0.0:5060 advertise ${PUBLIC_IP}:5060|" /etc/kamailio/kamailio.cfg
+    sed -i "s|listen=tcp:0.0.0.0:5060$|listen=tcp:0.0.0.0:5060 advertise ${PUBLIC_IP}:5060|" /etc/kamailio/kamailio.cfg
+    echo "Advertised address: ${PUBLIC_IP}"
 fi
 
 # Handle TLS mode

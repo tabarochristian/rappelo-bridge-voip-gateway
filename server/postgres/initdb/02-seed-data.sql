@@ -1,14 +1,5 @@
 -- Seed data for Rappelo Bridge VoIP Gateway
--- Domain is inserted dynamically by the init script below
-
-DO $$
-BEGIN
-    -- Insert default SIP domain from environment (falls back to sip.rappelo.local)
-    INSERT INTO domain (domain)
-    VALUES (COALESCE(current_setting('app.sip_domain', true), 'sip.rappelo.local'))
-    ON CONFLICT (domain) DO NOTHING;
-END
-$$;
+-- SIP domain is inserted by 03-seed-domain.sh using environment variables
 
 -- Dispatcher table for SIP trunks (e.g. Twilio)
 CREATE TABLE IF NOT EXISTS dispatcher (
