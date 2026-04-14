@@ -1,0 +1,158 @@
+##
+## Rappelo Bridge VoIP Gateway - SIP Server Stack
+##
+## One-click deployment: docker compose up -d
+##
+## Stack:
+##   - Kamailio 5.8  : SIP registrar/proxy (handles SIP signaling)
+##   - RTPEngine     : Media relay (RTP/SRTP, NAT traversal)
+##   - coturn        : STUN/TURN server (ICE NAT traversal for mobile)
+##   - PostgreSQL 16 : Subscriber database, CDR, dialog persistence
+##   - Admin Panel   : Web dashboard for SIP account & system management
+##
+
+services:
+
+  # ==========================================
+  # PostgreSQL - Subscriber & CDR Database
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: rappelo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KAMAILIO_DB_NAME:-kamailio}
+      POSTGRES_USER: ${KAMAILIO_DB_USER:-kamailio}
+      POSTGRES_PASSWORD: ${KAMAILIO_DB_PASSWORD:-kamailio-secret-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KAMAILIO_DB_USER:-kamailio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sip-net
+
+  # ==========================================
+  # Kamailio - SIP Registrar & Proxy
+  # ==========================================
+  kamailio:
+    build:
+      context: ./server/kamailio
+      dockerfile: Dockerfile
+    container_name: rappelo-kamailio
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rtpengine:
+        condition: service_started
+    environment:
+      KAMAILIO_DB_USER: ${KAMAILIO_DB_USER:-kamailio}
+      KAMAILIO_DB_PASSWORD: ${KAMAILIO_DB_PASSWORD:-kamailio-secret-change-me}
+      KAMAILIO_DB_NAME: ${KAMAILIO_DB_NAME:-kamailio}
+      SIP_DOMAIN: ${SIP_DOMAIN:-sip.rappelo.local}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+      ENABLE_TLS: ${ENABLE_TLS:-false}
+      DEBUG: ${DEBUG:-false}
+      TWILIO_TERMINATION_URI: ${TWILIO_TERMINATION_URI:-}
+    healthcheck:
+      test: ["CMD-SHELL", "kamailio -f /etc/kamailio/kamailio.cfg -c || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    ports:
+      # SIP UDP/TCP
+      - "${SIP_PORT:-5060}:5060/udp"
+      - "${SIP_PORT:-5060}:5060/tcp"
+      # SIP TLS
+      - "${SIP_TLS_PORT:-5061}:5061/tcp"
+      # SIP WebSocket (if needed later)
+      - "5080:5080/udp"
+      - "5080:5080/tcp"
+    networks:
+      - sip-net
+
+  # ==========================================
+  # RTPEngine - Media Relay
+  # ==========================================
+  rtpengine:
+    build:
+      context: ./server/rtpengine
+      dockerfile: Dockerfile
+    container_name: rappelo-rtpengine
+    restart: unless-stopped
+    privileged: true
+    environment:
+      PUBLIC_IP: ${PUBLIC_IP:-}
+    ports:
+      # RTP media port range
+      - "30000-30100:30000-30100/udp"
+    networks:
+      - sip-net
+
+  # ==========================================
+  # coturn - STUN/TURN Server
+  # ==========================================
+  coturn:
+    build:
+      context: ./server/coturn
+      dockerfile: Dockerfile
+    container_name: rappelo-coturn
+    restart: unless-stopped
+    environment:
+      SIP_DOMAIN: ${SIP_DOMAIN:-sip.rappelo.local}
+      TURN_SECRET: ${TURN_SECRET:-rappelo-turn-secret-change-me}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+    ports:
+      # STUN/TURN
+      - "${STUN_PORT:-3478}:3478/udp"
+      - "${STUN_PORT:-3478}:3478/tcp"
+      # TURN TLS
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      # TURN relay ports
+      - "49152-49200:49152-49200/udp"
+    networks:
+      - sip-net
+
+  # ==========================================
+  # Admin Panel - Web Dashboard
+  # ==========================================
+  admin:
+    build:
+      context: ./server/admin
+      dockerfile: Dockerfile
+    container_name: rappelo-admin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${KAMAILIO_DB_NAME:-kamailio}
+      DB_USER: ${KAMAILIO_DB_USER:-kamailio}
+      DB_PASS: ${KAMAILIO_DB_PASSWORD:-kamailio-secret-change-me}
+      SIP_DOMAIN: ${SIP_DOMAIN:-sip.rappelo.local}
+      KAMAILIO_JSONRPC: http://kamailio:5060/jsonrpc
+    ports:
+      - "${ADMIN_PORT:-8080}:8080"
+    networks:
+      - sip-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sip-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

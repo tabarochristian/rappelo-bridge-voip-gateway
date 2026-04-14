@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GSM-SIP Gateway</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_core">Gateway Core</string>
+    <string name="notification_channel_core_desc">Core service status notifications</string>
+    <string name="notification_channel_alerts">Alerts</string>
+    <string name="notification_channel_alerts_desc">Important alerts and warnings</string>
+    <string name="notification_channel_calls">Calls</string>
+    <string name="notification_channel_calls_desc">Active call notifications</string>
+    <string name="notification_channel_sms">SMS</string>
+    <string name="notification_channel_sms_desc">SMS delivery notifications</string>
+    
+    <!-- Service -->
+    <string name="service_notification_title">Gateway Running</string>
+    <string name="service_notification_text">GSM-SIP Gateway is active</string>
+    <string name="service_notification_text_registered">SIP Registered • Ready</string>
+    <string name="service_notification_text_unregistered">SIP Unregistered</string>
+    
+    <!-- Status -->
+    <string name="status_service_running">Service: Running</string>
+    <string name="status_service_stopped">Service: Stopped</string>
+    <string name="status_sip_registered">SIP: Registered</string>
+    <string name="status_sip_unregistered">SIP: Not Connected</string>
+    <string name="status_sip_registering">SIP: Registering…</string>
+    <string name="status_gsm_unknown">GSM: Unknown</string>
+    
+    <!-- Buttons -->
+    <string name="btn_start_service">Start Service</string>
+    <string name="btn_stop_service">Stop Service</string>
+    <string name="btn_grant_permissions">Grant Permissions</string>
+    
+    <!-- Labels -->
+    <string name="label_logs">Logs</string>
+    <string name="label_status">Status</string>
+    <string name="label_queued_calls">Queued Calls</string>
+    <string name="label_pending_sms">Pending SMS</string>
+    
+    <!-- Permissions -->
+    <string name="permission_rationale_title">Permissions Required</string>
+    <string name="permission_rationale_phone">Phone permissions are required to make and receive calls.</string>
+    <string name="permission_rationale_sms">SMS permissions are required to send and receive messages.</string>
+    <string name="permission_rationale_audio">Audio permissions are required for call audio routing.</string>
+    <string name="permission_rationale_battery">Battery optimization exemption is required for reliable background operation.</string>
+    
+    <!-- Errors -->
+    <string name="error_sip_registration_failed">SIP registration failed</string>
+    <string name="error_gsm_call_failed">GSM call failed</string>
+    <string name="error_sms_send_failed">SMS send failed</string>
+    <string name="error_queue_full">Queue is full</string>
+    <string name="error_network_unavailable">Network unavailable</string>
+    
+    <!-- Content descriptions -->
+    <string name="cd_status_indicator">Status indicator</string>
+    <string name="cd_start_service">Start gateway service</string>
+    <string name="cd_stop_service">Stop gateway service</string>
+</resources>

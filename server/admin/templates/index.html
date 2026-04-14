@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rappelo SIP Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
+    .fade-in { animation: fadeIn .2s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .stat-card { transition: box-shadow .15s; }
+    .stat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+        <h1 class="text-xl font-bold">Rappelo SIP Admin</h1>
+        <span class="text-sm text-gray-400 ml-2">{{ sip_domain }}</span>
+      </div>
+      <div id="conn-status" class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-gray-300" id="status-dot"></span>
+        <span class="text-sm text-gray-500" id="status-text">Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="bg-white border-b">
+    <div class="max-w-7xl mx-auto px-4 flex gap-6">
+      <button class="tab py-3 text-sm tab-active" data-tab="dashboard">Dashboard</button>
+      <button class="tab py-3 text-sm text-gray-500 hover:text-gray-700" data-tab="accounts">Accounts</button>
+      <button class="tab py-3 text-sm text-gray-500 hover:text-gray-700" data-tab="registrations">Online Devices</button>
+      <button class="tab py-3 text-sm text-gray-500 hover:text-gray-700" data-tab="cdr">Call Records</button>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="fade-in">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat-card bg-white rounded-lg p-5 border">
+          <p class="text-sm text-gray-500">SIP Accounts</p>
+          <p class="text-3xl font-bold mt-1" id="s-accounts">—</p>
+        </div>
+        <div class="stat-card bg-white rounded-lg p-5 border">
+          <p class="text-sm text-gray-500">Online Devices</p>
+          <p class="text-3xl font-bold mt-1 text-green-600" id="s-online">—</p>
+        </div>
+        <div class="stat-card bg-white rounded-lg p-5 border">
+          <p class="text-sm text-gray-500">Total Calls</p>
+          <p class="text-3xl font-bold mt-1 text-blue-600" id="s-calls">—</p>
+        </div>
+        <div class="stat-card bg-white rounded-lg p-5 border">
+          <p class="text-sm text-gray-500">Kamailio</p>
+          <p class="text-lg font-semibold mt-1" id="s-kamailio">—</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg border p-5">
+        <h3 class="font-semibold mb-3">System Info</h3>
+        <pre id="sys-info" class="text-xs bg-gray-50 rounded p-3 overflow-auto max-h-64 text-gray-600">Loading...</pre>
+      </div>
+    </section>
+
+    <!-- Accounts -->
+    <section id="tab-accounts" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">SIP Accounts</h2>
+        <button id="btn-add-account" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">+ Add Account</button>
+      </div>
+      <!-- Add form (hidden by default) -->
+      <div id="add-form" class="hidden bg-white rounded-lg border p-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input id="f-user" type="text" placeholder="Username" class="border rounded px-3 py-2 text-sm" pattern="[a-zA-Z0-9._-]+" required>
+          <input id="f-pass" type="password" placeholder="Password (min 6 chars)" class="border rounded px-3 py-2 text-sm" minlength="6" required>
+          <div class="flex gap-2">
+            <input id="f-domain" type="text" placeholder="Domain (optional)" class="border rounded px-3 py-2 text-sm flex-1">
+            <button id="btn-save" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Save</button>
+            <button id="btn-cancel" class="bg-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-400">Cancel</button>
+          </div>
+        </div>
+        <p id="form-error" class="text-red-500 text-sm mt-2 hidden"></p>
+      </div>
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50"><tr>
+            <th class="text-left px-4 py-3 font-medium">Username</th>
+            <th class="text-left px-4 py-3 font-medium">Domain</th>
+            <th class="text-left px-4 py-3 font-medium">Created</th>
+            <th class="text-right px-4 py-3 font-medium">Actions</th>
+          </tr></thead>
+          <tbody id="accounts-body"></tbody>
+        </table>
+        <p id="no-accounts" class="text-sm text-gray-400 text-center py-6 hidden">No accounts yet</p>
+      </div>
+    </section>
+
+    <!-- Registrations -->
+    <section id="tab-registrations" class="hidden fade-in">
+      <h2 class="text-lg font-semibold mb-4">Online Devices</h2>
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50"><tr>
+            <th class="text-left px-4 py-3 font-medium">User</th>
+            <th class="text-left px-4 py-3 font-medium">Contact</th>
+            <th class="text-left px-4 py-3 font-medium">User-Agent</th>
+            <th class="text-left px-4 py-3 font-medium">Expires</th>
+          </tr></thead>
+          <tbody id="reg-body"></tbody>
+        </table>
+        <p id="no-regs" class="text-sm text-gray-400 text-center py-6 hidden">No devices online</p>
+      </div>
+    </section>
+
+    <!-- CDR -->
+    <section id="tab-cdr" class="hidden fade-in">
+      <h2 class="text-lg font-semibold mb-4">Call Detail Records</h2>
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50"><tr>
+            <th class="text-left px-4 py-3 font-medium">Time</th>
+            <th class="text-left px-4 py-3 font-medium">Method</th>
+            <th class="text-left px-4 py-3 font-medium">From</th>
+            <th class="text-left px-4 py-3 font-medium">To</th>
+            <th class="text-left px-4 py-3 font-medium">Status</th>
+          </tr></thead>
+          <tbody id="cdr-body"></tbody>
+        </table>
+        <p id="no-cdr" class="text-sm text-gray-400 text-center py-6 hidden">No call records</p>
+      </div>
+    </section>
+  </main>
+
+<script>
+// ── API helpers ──
+const api = (path, opts) => fetch(`/api${path}`, {headers: {'Content-Type': 'application/json'}, ...opts}).then(async r => {
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+});
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+    btn.classList.add('tab-active');
+    document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.add('hidden'));
+    document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+    load(btn.dataset.tab);
+  });
+});
+
+// ── Loaders ──
+async function load(tab) {
+  try {
+    if (tab === 'dashboard') await loadDashboard();
+    else if (tab === 'accounts') await loadAccounts();
+    else if (tab === 'registrations') await loadRegs();
+    else if (tab === 'cdr') await loadCDR();
+  } catch (e) { console.error(e); }
+}
+
+async function loadDashboard() {
+  try {
+    const s = await api('/status');
+    document.getElementById('s-accounts').textContent = s.accounts;
+    document.getElementById('s-online').textContent = s.online;
+    document.getElementById('s-calls').textContent = s.total_calls;
+    document.getElementById('s-kamailio').textContent = typeof s.kamailio_stats === 'string' ? s.kamailio_stats : 'Connected';
+    document.getElementById('sys-info').textContent = JSON.stringify(s, null, 2);
+    setStatus(true);
+  } catch (e) {
+    setStatus(false);
+    document.getElementById('sys-info').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function loadAccounts() {
+  const rows = await api('/accounts');
+  const body = document.getElementById('accounts-body');
+  const none = document.getElementById('no-accounts');
+  if (!rows.length) { body.innerHTML = ''; none.classList.remove('hidden'); return; }
+  none.classList.add('hidden');
+  body.innerHTML = rows.map(a => `<tr class="border-t hover:bg-gray-50">
+    <td class="px-4 py-3 font-mono">${esc(a.username)}</td>
+    <td class="px-4 py-3">${esc(a.domain)}</td>
+    <td class="px-4 py-3 text-gray-500">${fmtDate(a.datetime_created)}</td>
+    <td class="px-4 py-3 text-right">
+      <button onclick="delAccount('${esc(a.username)}','${esc(a.domain)}')" class="text-red-500 hover:text-red-700 text-xs">Delete</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function loadRegs() {
+  const rows = await api('/registrations');
+  const body = document.getElementById('reg-body');
+  const none = document.getElementById('no-regs');
+  if (!rows.length) { body.innerHTML = ''; none.classList.remove('hidden'); return; }
+  none.classList.add('hidden');
+  body.innerHTML = rows.map(r => `<tr class="border-t hover:bg-gray-50">
+    <td class="px-4 py-3 font-mono">${esc(r.username)}@${esc(r.domain||'')}</td>
+    <td class="px-4 py-3 text-xs break-all">${esc((r.contact||'').slice(0,60))}</td>
+    <td class="px-4 py-3 text-xs">${esc((r.user_agent||'').slice(0,30))}</td>
+    <td class="px-4 py-3 text-xs">${fmtDate(r.expires)}</td>
+  </tr>`).join('');
+}
+
+async function loadCDR() {
+  const rows = await api('/cdr?limit=100');
+  const body = document.getElementById('cdr-body');
+  const none = document.getElementById('no-cdr');
+  if (!rows.length) { body.innerHTML = ''; none.classList.remove('hidden'); return; }
+  none.classList.add('hidden');
+  body.innerHTML = rows.map(c => `<tr class="border-t hover:bg-gray-50">
+    <td class="px-4 py-3 text-xs">${fmtDate(c.time)}</td>
+    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs ${c.method==='INVITE'?'bg-green-100 text-green-700':'bg-gray-100'}">${esc(c.method)}</span></td>
+    <td class="px-4 py-3 font-mono text-xs">${esc(c.src_user)}@${esc(c.src_domain)}</td>
+    <td class="px-4 py-3 font-mono text-xs">${esc(c.dst_user)}@${esc(c.dst_domain)}</td>
+    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs ${c.sip_code<'300'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}">${esc(c.sip_code)} ${esc(c.sip_reason)}</span></td>
+  </tr>`).join('');
+}
+
+// ── Account CRUD ──
+document.getElementById('btn-add-account').onclick = () => {
+  document.getElementById('add-form').classList.toggle('hidden');
+};
+document.getElementById('btn-cancel').onclick = () => {
+  document.getElementById('add-form').classList.add('hidden');
+};
+document.getElementById('btn-save').onclick = async () => {
+  const u = document.getElementById('f-user').value.trim();
+  const p = document.getElementById('f-pass').value;
+  const d = document.getElementById('f-domain').value.trim() || undefined;
+  const errEl = document.getElementById('form-error');
+  errEl.classList.add('hidden');
+  try {
+    await api('/accounts', {method:'POST', body: JSON.stringify({username:u, password:p, domain:d})});
+    document.getElementById('add-form').classList.add('hidden');
+    document.getElementById('f-user').value = '';
+    document.getElementById('f-pass').value = '';
+    document.getElementById('f-domain').value = '';
+    loadAccounts();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+  }
+};
+
+async function delAccount(user, domain) {
+  if (!confirm(`Delete account ${user}@${domain}?`)) return;
+  try {
+    await api(`/accounts/${encodeURIComponent(user)}?domain=${encodeURIComponent(domain)}`, {method:'DELETE'});
+    loadAccounts();
+  } catch(e) { alert(e.message); }
+}
+
+// ── Util ──
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+function fmtDate(s) { if (!s) return '—'; const d = new Date(s); return d.toLocaleString(); }
+function setStatus(ok) {
+  document.getElementById('status-dot').className = `w-2.5 h-2.5 rounded-full ${ok?'bg-green-500':'bg-red-500'}`;
+  document.getElementById('status-text').textContent = ok ? 'Connected' : 'Disconnected';
+}
+
+// ── Init ──
+loadDashboard();
+setInterval(loadDashboard, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+[versions]
+# SDK versions
+compileSdk = "34"
+minSdk = "29"
+targetSdk = "34"
+
+# Kotlin & Gradle
+kotlin = "2.0.21"
+agp = "8.11.1"
+ksp = "2.0.21-1.0.28"
+
+# AndroidX Core
+coreKtx = "1.12.0"
+appcompat = "1.6.1"
+activity = "1.8.2"
+fragment = "1.6.2"
+constraintlayout = "2.1.4"
+recyclerview = "1.3.2"
+cardview = "1.0.0"
+material = "1.11.0"
+
+# Lifecycle & ViewModel
+lifecycle = "2.7.0"
+
+# Hilt
+hilt = "2.48"
+hiltWork = "1.1.0"
+
+# Room
+room = "2.6.1"
+
+# Coroutines
+coroutines = "1.7.3"
+
+# Network
+retrofit = "2.9.0"
+okhttp = "4.12.0"
+kotlinxSerialization = "1.6.2"
+retrofitKotlinxSerialization = "1.0.0"
+
+# NanoHTTPD
+nanohttpd = "2.3.1"
+
+# Security
+securityCrypto = "1.1.0-alpha06"
+
+# WorkManager
+workManager = "2.9.0"
+
+# Testing
+junit4 = "4.13.2"
+mockitoKotlin = "5.3.1"
+turbine = "1.0.0"
+coroutinesTest = "1.7.3"
+
+[libraries]
+# AndroidX Core
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activity" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+
+# Lifecycle
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycle" }
+
+# Hilt
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hiltWork" }
+
+# Room
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+# Coroutines
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Network
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+retrofit-kotlinx-serialization = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "retrofitKotlinxSerialization" }
+
+# NanoHTTPD
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+
+# Security
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+
+# WorkManager
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+
+# Testing
+junit4 = { group = "junit", name = "junit", version.ref = "junit4" }
+mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
+
+[bundles]
+lifecycle = ["androidx-lifecycle-viewmodel-ktx", "androidx-lifecycle-runtime-ktx", "androidx-lifecycle-service"]
+room = ["androidx-room-runtime", "androidx-room-ktx"]
+network = ["retrofit", "okhttp", "okhttp-logging", "kotlinx-serialization-json", "retrofit-kotlinx-serialization"]
+coroutines = ["kotlinx-coroutines-core", "kotlinx-coroutines-android"]
+testing = ["junit4", "mockito-kotlin", "turbine", "kotlinx-coroutines-test"]
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

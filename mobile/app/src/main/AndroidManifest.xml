@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============================================ -->
+    <!-- TELEPHONY PERMISSIONS                        -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    
+    <!-- Requires privileged system install or adb grant -->
+    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ============================================ -->
+    <!-- AUDIO PERMISSIONS                            -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- ============================================ -->
+    <!-- SMS PERMISSIONS                              -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
+    <!-- ============================================ -->
+    <!-- NETWORK PERMISSIONS                          -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- ============================================ -->
+    <!-- CONTACTS PERMISSIONS                         -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- ============================================ -->
+    <!-- NOTIFICATION PERMISSIONS (Android 13+)       -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ============================================ -->
+    <!-- BACKGROUND / SERVICE PERMISSIONS             -->
+    <!-- ============================================ -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- ============================================ -->
+    <!-- HARDWARE FEATURES                            -->
+    <!-- ============================================ -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="true" />
+
+    <application
+        android:name=".app.GatewayApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GsmSipGateway"
+        android:usesCleartextTraffic="false"
+        tools:targetApi="34">
+
+        <!-- ============================================ -->
+        <!-- MAIN ACTIVITY                                -->
+        <!-- ============================================ -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.GsmSipGateway">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ============================================ -->
+        <!-- FOREGROUND SERVICE                           -->
+        <!-- ============================================ -->
+        <service
+            android:name=".service.GatewayForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall"
+            android:stopWithTask="false" />
+
+        <!-- ============================================ -->
+        <!-- BOOT RECEIVER                                -->
+        <!-- ============================================ -->
+        <receiver
+            android:name=".boot.BootReceiver"
+            android:directBootAware="true"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!-- HTC -->
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ============================================ -->
+        <!-- GSM STATE RECEIVER                           -->
+        <!-- ============================================ -->
+        <receiver
+            android:name=".telephony.gsm.GsmStateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.PHONE_STATE" />
+                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ============================================ -->
+        <!-- SMS RECEIVER                                 -->
+        <!-- ============================================ -->
+        <receiver
+            android:name=".telephony.gsm.SmsReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ============================================ -->
+        <!-- WORKMANAGER INITIALIZER                      -->
+        <!-- ============================================ -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
+        <!-- Hilt WorkManager integration -->
+        <provider
+            android:name="androidx.hilt.work.HiltWorkerFactory"
+            android:authorities="${applicationId}.hiltworkerfactory"
+            android:exported="false"
+            tools:node="remove" />
+
+    </application>
+
+</manifest>

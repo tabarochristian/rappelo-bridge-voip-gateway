@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingVertical="4dp"
+    android:paddingHorizontal="8dp">
+
+    <TextView
+        android:id="@+id/logTimestamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="10sp"
+        android:textColor="@color/text_secondary"
+        android:fontFamily="monospace"
+        tools:text="12:34:56.789" />
+
+    <TextView
+        android:id="@+id/logLevel"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        tools:text="INFO"
+        tools:textColor="@color/log_info" />
+
+    <TextView
+        android:id="@+id/logMessage"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="8dp"
+        android:textSize="11sp"
+        android:textColor="@color/text_primary"
+        android:fontFamily="monospace"
+        android:maxLines="3"
+        android:ellipsize="end"
+        tools:text="[GatewayService] Service started successfully" />
+
+</LinearLayout>
