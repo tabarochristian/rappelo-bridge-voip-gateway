@@ -69,21 +69,11 @@ class SipEngineImpl @Inject constructor(
             // Configure endpoint
             val epConfig = EpConfig()
             
-            // Log config
+            // Log config — consoleLevel > 0 routes to Android logcat via __android_log_write
+            // Do NOT use a custom LogWriter: PJSIP's native worker_thread can call it
+            // after Endpoint shutdown, causing a SIGSEGV in utilLogWrite.
             epConfig.logConfig.level = 5
             epConfig.logConfig.consoleLevel = 5
-            epConfig.logConfig.writer = object : LogWriter() {
-                override fun write(entry: LogEntry) {
-                    val msg = entry.msg.trimEnd()
-                    when {
-                        entry.level <= 1 -> android.util.Log.e("PJSIP", msg)
-                        entry.level == 2 -> android.util.Log.w("PJSIP", msg)
-                        entry.level == 3 -> android.util.Log.i("PJSIP", msg)
-                        entry.level == 4 -> android.util.Log.d("PJSIP", msg)
-                        else             -> android.util.Log.v("PJSIP", msg)
-                    }
-                }
-            }
             
             // Media config
             epConfig.medConfig.clockRate = 16000
