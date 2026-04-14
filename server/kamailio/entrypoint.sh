@@ -31,7 +31,11 @@ sed -i "s/KAMAILIO_SIP_DOMAIN/${SIP_DOMAIN:-sip.rappelo.local}/g" /etc/kamailio/
 if [ -n "$PUBLIC_IP" ]; then
     sed -i "s|listen=udp:0.0.0.0:5060$|listen=udp:0.0.0.0:5060 advertise ${PUBLIC_IP}:5060|" /etc/kamailio/kamailio.cfg
     sed -i "s|listen=tcp:0.0.0.0:5060$|listen=tcp:0.0.0.0:5060 advertise ${PUBLIC_IP}:5060|" /etc/kamailio/kamailio.cfg
-    echo "Advertised address: ${PUBLIC_IP}"
+    # Add alias so PUBLIC_IP is recognized as 'myself'
+    # This ensures from_uri==myself for users @PUBLIC_IP, preventing
+    # auth_check flag-1 identity mismatch (403 Forbidden)
+    sed -i "s|# DYNAMIC_ALIAS|alias=\"${PUBLIC_IP}\"|" /etc/kamailio/kamailio.cfg
+    echo "Advertised address: ${PUBLIC_IP} (alias added to myself)"
 fi
 
 # Handle TLS mode
