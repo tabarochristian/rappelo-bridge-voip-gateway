@@ -500,9 +500,9 @@ class SipEngineImpl @Inject constructor(
         }
     }
 
-    override fun getConfPort(callId: Int): Int {
-        val call = activeCalls[callId] ?: return -1
-        return try {
+    override suspend fun getConfPort(callId: Int): Int = withContext(pjDispatcher) {
+        val call = activeCalls[callId] ?: return@withContext -1
+        try {
             val ci = call.info
             val media = ci.media
             val mediaCount: Int = media?.size ?: 0
@@ -510,6 +510,69 @@ class SipEngineImpl @Inject constructor(
         } catch (e: Exception) {
             -1
         }
+    }
+
+    // ── Audio bridge (null device + AudioMediaPort) ──────────────────
+
+    private var activeBridgePort: org.pjsip.pjsua2.AudioMediaPort? = null
+
+    override suspend fun connectAudioBridge(callId: Int, bridge: SipAudioBridge): Boolean =
+        withContext(pjDispatcher) {
+            try {
+                // 1. Disable PJSIP's built-in sound device so it does not
+                //    compete with the GSM call for the phone's mic/speaker.
+                endpoint?.audDevManager()?.setNullDev()
+                GatewayLogger.info(TAG, "PJSIP null audio device activated")
+
+                // 2. Create the bridge AudioMediaPort (on the PJSIP thread – required)
+                val port = bridge.createPort()
+                activeBridgePort = port
+
+                // 3. Find the call's active audio media
+                val call = activeCalls[callId]
+                if (call == null) {
+                    GatewayLogger.warn(TAG, "Call $callId not found for audio bridge")
+                    return@withContext false
+                }
+
+                val ci = call.info
+                for (i in 0 until ci.media.size.toInt()) {
+                    val mi = ci.media[i]
+                    if (mi.type == pjmedia_type.PJMEDIA_TYPE_AUDIO &&
+                        (mi.status == pjsua_call_media_status.PJSUA_CALL_MEDIA_ACTIVE ||
+                         mi.status == pjsua_call_media_status.PJSUA_CALL_MEDIA_REMOTE_HOLD)
+                    ) {
+                        val callMedia = AudioMedia.typecastFromMedia(call.getMedia(i.toLong()))
+
+                        // Bidirectional connection through the conference bridge:
+                        //   callMedia → port   (SIP RX → onFrameReceived → AudioTrack → speaker)
+                        //   port → callMedia    (mic → AudioRecord → onFrameRequested → SIP TX)
+                        callMedia.startTransmit(port)
+                        port.startTransmit(callMedia)
+
+                        GatewayLogger.info(TAG, "Bridge port connected to call $callId (slot ${mi.audioConfSlot})")
+                        return@withContext true
+                    }
+                }
+
+                GatewayLogger.warn(TAG, "No active audio media for call $callId")
+                false
+            } catch (e: Exception) {
+                GatewayLogger.error(TAG, "Failed to connect audio bridge for call $callId", e)
+                false
+            }
+        }
+
+    override suspend fun disconnectAudioBridge(): Unit = withContext(pjDispatcher) {
+        activeBridgePort?.let { port ->
+            try {
+                port.delete()
+                GatewayLogger.info(TAG, "Bridge AudioMediaPort deleted")
+            } catch (e: Exception) {
+                GatewayLogger.warn(TAG, "Error deleting bridge port", e)
+            }
+        }
+        activeBridgePort = null
     }
 
     override fun setCallListener(listener: SipCallListener?) {

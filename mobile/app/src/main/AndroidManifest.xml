@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     
     <!-- Requires privileged system install or adb grant -->
@@ -21,6 +22,9 @@
     <!-- ============================================ -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Required for VOICE_DOWNLINK/VOICE_CALL AudioRecord sources (call audio tap). -->
+    <!-- Grant on dev device: adb shell pm grant com.gateway android.permission.CAPTURE_AUDIO_OUTPUT -->
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -103,6 +107,51 @@
             android:exported="false"
             android:theme="@style/Theme.GsmSipGateway" />
 
+        <activity
+            android:name=".ui.DialerPadActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GsmSipGateway" />
+
+        <!-- ============================================ -->
+        <!-- DIALER ACTIVITY (required for ROLE_DIALER)   -->
+        <!-- ============================================ -->
+        <activity
+            android:name=".ui.DialerActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.GsmSipGateway">
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.CALL_BUTTON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.CALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.CALL_PRIVILEGED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+        </activity>
+
         <!-- ============================================ -->
         <!-- FOREGROUND SERVICE                           -->
         <!-- ============================================ -->
@@ -112,6 +161,24 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall"
             android:stopWithTask="false" />
+
+        <!-- ============================================ -->
+        <!-- IN-CALL SERVICE (default dialer)             -->
+        <!-- ============================================ -->
+        <service
+            android:name=".telephony.gsm.GatewayInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="false" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
 
         <!-- ============================================ -->
         <!-- BOOT RECEIVER                                -->

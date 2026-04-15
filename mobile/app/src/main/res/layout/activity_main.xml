@@ -66,6 +66,87 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- Active Call Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/activeCallCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#1B5E20"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="6dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/statusCard"
+        app:strokeColor="#4CAF50"
+        app:strokeWidth="1dp"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/activeCallStateText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Active Call"
+                    android:textColor="#A5D6A7"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    tools:text="Active" />
+
+                <TextView
+                    android:id="@+id/activeCallNumberText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="+243815742718"
+                    android:textColor="@android:color/white"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    tools:text="+243815742718" />
+
+                <TextView
+                    android:id="@+id/activeCallDurationText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="00:00"
+                    android:textColor="#A5D6A7"
+                    android:textSize="14sp"
+                    tools:text="01:23" />
+
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/hangupButton"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="✕"
+                android:textColor="@android:color/white"
+                android:textSize="20sp"
+                app:backgroundTint="#D32F2F"
+                app:cornerRadius="28dp"
+                app:iconPadding="0dp" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
     <!-- Permission Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/permissionButton"
@@ -76,7 +157,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/statusCard"
+        app:layout_constraintTop_toBottomOf="@id/activeCallCard"
         app:backgroundTint="@color/warning"
         tools:visibility="visible" />
 
@@ -137,5 +218,18 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/logsLabel"
         tools:listitem="@layout/item_log" />
+
+    <!-- USSD FAB -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/ussdFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="USSD"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:fabSize="normal"
+        app:srcCompat="@drawable/ic_dialpad"
+        app:tint="@android:color/white" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

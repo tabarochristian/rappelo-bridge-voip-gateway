@@ -7,7 +7,9 @@ import com.gateway.data.api.model.CommandRequest
 import com.gateway.data.prefs.EncryptedPrefsManager
 import com.gateway.queue.CallQueue
 import com.gateway.queue.model.CallDirection
+import com.gateway.telephony.gsm.GsmCallManager
 import com.gateway.telephony.gsm.SmsGsmManager
+import com.gateway.telephony.gsm.UssdState
 import com.gateway.telephony.sip.SipEngine
 import com.gateway.util.GatewayLogger
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +26,7 @@ class CommandDispatcher @Inject constructor(
     private val callBridge: CallBridge,
     private val callQueue: CallQueue,
     private val smsManager: SmsGsmManager,
+    private val gsmCallManager: GsmCallManager,
     private val prefsManager: EncryptedPrefsManager,
     @Named("ApplicationScope") private val applicationScope: CoroutineScope
 ) {
@@ -58,6 +61,7 @@ class CommandDispatcher @Inject constructor(
                 "make_call" -> handleMakeCall(command)
                 "hangup_call" -> handleHangupCall(command)
                 "send_sms" -> handleSendSms(command)
+                "send_ussd" -> handleSendUssd(command)
                 "sip_register" -> handleSipRegister(command)
                 "sip_unregister" -> handleSipUnregister(command)
                 "get_status" -> handleGetStatus(command)
@@ -168,5 +172,42 @@ class CommandDispatcher @Inject constructor(
             sipEngine.registerAccount()
         }
         commandPoller.reportResult(command.commandId, true, "SIP engine restarted", null)
+    }
+
+    private suspend fun handleSendUssd(command: CommandRequest) {
+        val code = command.params["code"]
+        if (code.isNullOrBlank()) {
+            commandPoller.reportResult(command.commandId, false, null, "Missing 'code' parameter")
+            return
+        }
+
+        val simSlot = command.params["sim_slot"]?.toIntOrNull() ?: 0
+        val sent = gsmCallManager.sendUssdRequest(code, simSlot)
+        if (!sent) {
+            commandPoller.reportResult(command.commandId, false, null, "Failed to send USSD request")
+            return
+        }
+
+        // Wait for response (up to 30 seconds)
+        var attempts = 0
+        while (attempts < 60) {
+            kotlinx.coroutines.delay(500)
+            val state = gsmCallManager.ussdState.value
+            when (state) {
+                is UssdState.Response -> {
+                    commandPoller.reportResult(command.commandId, true, state.message, null)
+                    gsmCallManager.dismissUssd()
+                    return
+                }
+                is UssdState.Error -> {
+                    commandPoller.reportResult(command.commandId, false, null, state.errorMessage)
+                    gsmCallManager.dismissUssd()
+                    return
+                }
+                else -> attempts++
+            }
+        }
+        commandPoller.reportResult(command.commandId, false, null, "USSD request timed out")
+        gsmCallManager.dismissUssd()
     }
 }

@@ -6,20 +6,29 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.telecom.Call
+import android.telecom.DisconnectCause
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
 import android.telephony.SignalStrength
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
-import android.view.KeyEvent
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.gateway.util.GatewayLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executor
 import javax.inject.Inject
@@ -42,76 +51,178 @@ class GsmCallManagerImpl @Inject constructor(
     private val _activeCallCount = MutableStateFlow(0)
     override val activeCallCount: StateFlow<Int> = _activeCallCount.asStateFlow()
 
+    private val _ussdState = MutableStateFlow<UssdState>(UssdState.Idle)
+    override val ussdState: StateFlow<UssdState> = _ussdState.asStateFlow()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var telephonyCallback: Any? = null
     @Suppress("DEPRECATION")
     private var phoneStateListener: PhoneStateListener? = null
 
     private var isInitialized = false
+    private var scope: CoroutineScope? = null
 
     override suspend fun initialize() {
         if (isInitialized) return
 
         withContext(Dispatchers.Main) {
-            setupTelephonyCallbacks()
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+            setupSignalStrengthCallback()
+            observeInCallServiceEvents()
             isInitialized = true
-            GatewayLogger.info(TAG, "GsmCallManager initialized")
+            GatewayLogger.info(TAG, "GsmCallManager initialized (InCallService mode)")
         }
     }
 
     override suspend fun shutdown() {
         withContext(Dispatchers.Main) {
-            removeTelephonyCallbacks()
+            scope?.cancel()
+            scope = null
+            removeSignalStrengthCallback()
             isInitialized = false
             GatewayLogger.info(TAG, "GsmCallManager shutdown")
         }
     }
 
-    private fun setupTelephonyCallbacks() {
+    /**
+     * Observe call events from the InCallService via the singleton connection.
+     */
+    private fun observeInCallServiceEvents() {
+        scope?.launch {
+            InCallServiceConnection.callEvents.collect { event ->
+                handleInCallEvent(event)
+            }
+        }
+        GatewayLogger.info(TAG, "Observing InCallService events")
+    }
+
+    private fun handleInCallEvent(event: InCallServiceConnection.CallEvent) {
+        val call = event.call
+        val callerId = call.details?.handle?.schemeSpecificPart ?: "Unknown"
+        val simSlot = dualSimManager.getActiveSimSlot()
+
+        val newState = when (event.state) {
+            Call.STATE_RINGING -> {
+                GatewayLogger.info(TAG, "InCallService: Ringing from $callerId")
+                GsmCallState.Ringing(callerId, simSlot)
+            }
+            Call.STATE_DIALING, Call.STATE_CONNECTING -> {
+                GatewayLogger.info(TAG, "InCallService: Dialing $callerId")
+                // Preserve the number from the Dialing state we set in placeCall()
+                val current = _callState.value
+                if (current is GsmCallState.Dialing) current
+                else GsmCallState.Dialing(callerId, simSlot)
+            }
+            Call.STATE_ACTIVE -> {
+                _activeCallCount.value = 1
+                val current = _callState.value
+                val id = when (current) {
+                    is GsmCallState.Dialing -> current.number
+                    is GsmCallState.Ringing -> current.callerId
+                    else -> callerId
+                }
+                GatewayLogger.info(TAG, "InCallService: Active ($id)")
+                GsmCallState.Active(id, simSlot)
+            }
+            Call.STATE_HOLDING -> {
+                val current = _callState.value
+                val id = when (current) {
+                    is GsmCallState.Active -> current.callerId
+                    else -> callerId
+                }
+                GatewayLogger.info(TAG, "InCallService: On Hold ($id)")
+                GsmCallState.OnHold(id, simSlot)
+            }
+            Call.STATE_DISCONNECTING -> {
+                // Transitional state, keep current state
+                GatewayLogger.info(TAG, "InCallService: Disconnecting")
+                _callState.value
+            }
+            Call.STATE_DISCONNECTED -> {
+                _activeCallCount.value = 0
+                val reason = mapDisconnectCause(event.disconnectCause)
+                val current = _callState.value
+                val id = when (current) {
+                    is GsmCallState.Active -> current.callerId
+                    is GsmCallState.Dialing -> current.number
+                    is GsmCallState.Ringing -> current.callerId
+                    is GsmCallState.OnHold -> current.callerId
+                    else -> callerId
+                }
+                GatewayLogger.info(TAG, "InCallService: Disconnected ($id) reason=$reason")
+                GsmCallState.Ended(reason, id)
+            }
+            else -> {
+                GatewayLogger.debug(TAG, "InCallService: Unhandled state ${InCallServiceConnection.stateToString(event.state)}")
+                _callState.value
+            }
+        }
+
+        _callState.value = newState
+        GatewayLogger.debug(TAG, "GSM call state: ${newState.displayName}")
+
+        // Auto-transition Ended → Idle after 1.5s so the UI clears and the system is ready for the next call
+        if (newState is GsmCallState.Ended) {
+            scope?.launch {
+                delay(1500)
+                if (_callState.value is GsmCallState.Ended) {
+                    _callState.value = GsmCallState.Idle
+                    GatewayLogger.debug(TAG, "Auto-transition: Ended → Idle")
+                }
+            }
+        }
+    }
+
+    private fun mapDisconnectCause(cause: DisconnectCause?): EndReason {
+        return when (cause?.code) {
+            DisconnectCause.LOCAL -> EndReason.USER_HANGUP
+            DisconnectCause.REMOTE -> EndReason.REMOTE_HANGUP
+            DisconnectCause.BUSY -> EndReason.BUSY
+            DisconnectCause.REJECTED -> EndReason.REJECTED
+            DisconnectCause.MISSED -> EndReason.NO_ANSWER
+            DisconnectCause.ERROR -> EndReason.ERROR
+            DisconnectCause.CANCELED -> EndReason.USER_HANGUP
+            else -> EndReason.NORMAL
+        }
+    }
+
+    // ========== Signal strength (still uses TelephonyCallback, independent of InCallService) ==========
+
+    private fun setupSignalStrengthCallback() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            setupTelephonyCallbackApi31()
+            setupSignalStrengthApi31()
         } else {
-            setupPhoneStateListenerLegacy()
+            setupSignalStrengthLegacy()
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private fun setupTelephonyCallbackApi31() {
+    private fun setupSignalStrengthApi31() {
         val executor: Executor = context.mainExecutor
 
-        val callback = object : TelephonyCallback(), 
-            TelephonyCallback.CallStateListener,
+        val callback = object : TelephonyCallback(),
             TelephonyCallback.SignalStrengthsListener {
-
-            override fun onCallStateChanged(state: Int) {
-                handleCallStateChanged(state, null)
-            }
-
             override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
                 handleSignalStrengthChanged(signalStrength)
             }
         }
 
         try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) 
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE)
                 == PackageManager.PERMISSION_GRANTED) {
                 telephonyManager.registerTelephonyCallback(executor, callback)
                 telephonyCallback = callback
-                GatewayLogger.info(TAG, "Registered TelephonyCallback (API 31+)")
-            } else {
-                GatewayLogger.warn(TAG, "Missing READ_PHONE_STATE permission")
+                GatewayLogger.info(TAG, "Registered signal strength callback (API 31+)")
             }
         } catch (e: Exception) {
-            GatewayLogger.error(TAG, "Failed to register TelephonyCallback", e)
+            GatewayLogger.error(TAG, "Failed to register signal strength callback", e)
         }
     }
 
     @Suppress("DEPRECATION")
-    private fun setupPhoneStateListenerLegacy() {
+    private fun setupSignalStrengthLegacy() {
         phoneStateListener = object : PhoneStateListener() {
-            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                handleCallStateChanged(state, phoneNumber)
-            }
-
             override fun onSignalStrengthsChanged(signalStrength: SignalStrength?) {
                 signalStrength?.let { handleSignalStrengthChanged(it) }
             }
@@ -120,15 +231,15 @@ class GsmCallManagerImpl @Inject constructor(
         try {
             telephonyManager.listen(
                 phoneStateListener,
-                PhoneStateListener.LISTEN_CALL_STATE or PhoneStateListener.LISTEN_SIGNAL_STRENGTHS
+                PhoneStateListener.LISTEN_SIGNAL_STRENGTHS
             )
-            GatewayLogger.info(TAG, "Registered PhoneStateListener (legacy)")
+            GatewayLogger.info(TAG, "Registered signal strength listener (legacy)")
         } catch (e: Exception) {
-            GatewayLogger.error(TAG, "Failed to register PhoneStateListener", e)
+            GatewayLogger.error(TAG, "Failed to register signal strength listener", e)
         }
     }
 
-    private fun removeTelephonyCallbacks() {
+    private fun removeSignalStrengthCallback() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyCallback?.let {
                 telephonyManager.unregisterTelephonyCallback(it as TelephonyCallback)
@@ -143,83 +254,30 @@ class GsmCallManagerImpl @Inject constructor(
         }
     }
 
-    private fun handleCallStateChanged(state: Int, phoneNumber: String?) {
-        val newState = when (state) {
-            TelephonyManager.CALL_STATE_IDLE -> {
-                _activeCallCount.value = 0
-                val previousState = _callState.value
-                if (previousState is GsmCallState.Active || previousState is GsmCallState.Ringing) {
-                    GsmCallState.Ended(EndReason.NORMAL, phoneNumber)
-                } else {
-                    GsmCallState.Idle
-                }
-            }
-            TelephonyManager.CALL_STATE_RINGING -> {
-                val callerId = phoneNumber ?: "Unknown"
-                GatewayLogger.info(TAG, "Incoming call from: $callerId")
-                GsmCallState.Ringing(callerId, dualSimManager.getActiveSimSlot())
-            }
-            TelephonyManager.CALL_STATE_OFFHOOK -> {
-                _activeCallCount.value = 1
-                val currentState = _callState.value
-                when (currentState) {
-                    is GsmCallState.Ringing -> {
-                        GatewayLogger.info(TAG, "Call answered: ${currentState.callerId}")
-                        GsmCallState.Active(currentState.callerId, currentState.simSlot)
-                    }
-                    is GsmCallState.Dialing -> {
-                        GatewayLogger.info(TAG, "Outgoing call connected: ${currentState.number}")
-                        GsmCallState.Active(currentState.number, currentState.simSlot)
-                    }
-                    else -> {
-                        GsmCallState.Active(phoneNumber ?: "Unknown", dualSimManager.getActiveSimSlot())
-                    }
-                }
-            }
-            else -> _callState.value
-        }
-
-        _callState.value = newState
-        GatewayLogger.debug(TAG, "Call state changed: ${newState.displayName}")
-    }
-
     private fun handleSignalStrengthChanged(signalStrength: SignalStrength) {
         val dbm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             signalStrength.cellSignalStrengths.firstOrNull()?.dbm ?: -999
         } else {
             @Suppress("DEPRECATION")
             signalStrength.gsmSignalStrength.let { asu ->
-                if (asu in 0..31) {
-                    -113 + 2 * asu
-                } else {
-                    -999
-                }
+                if (asu in 0..31) -113 + 2 * asu else -999
             }
         }
-
         _signalStrengthDbm.value = if (dbm != -999) dbm else null
     }
 
+    // ========== Call control via InCallService Call objects ==========
+
     override suspend fun answerCall(): Boolean {
         return withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null || call.state != Call.STATE_RINGING) {
+                GatewayLogger.warn(TAG, "No ringing call to answer")
+                return@withContext false
+            }
             try {
-                if (_callState.value !is GsmCallState.Ringing) {
-                    GatewayLogger.warn(TAG, "No ringing call to answer")
-                    return@withContext false
-                }
-
-                // Try TelecomManager first (requires ANSWER_PHONE_CALLS permission)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS)
-                        == PackageManager.PERMISSION_GRANTED) {
-                        telecomManager.acceptRingingCall()
-                        GatewayLogger.info(TAG, "Call answered via TelecomManager")
-                        return@withContext true
-                    }
-                }
-
-                // Fallback: Send key event (less reliable but doesn't need special permission)
-                answerViaKeyEvent()
+                call.answer(android.telecom.VideoProfile.STATE_AUDIO_ONLY)
+                GatewayLogger.info(TAG, "Call answered via InCallService")
                 true
             } catch (e: Exception) {
                 GatewayLogger.error(TAG, "Failed to answer call", e)
@@ -228,44 +286,16 @@ class GsmCallManagerImpl @Inject constructor(
         }
     }
 
-    private fun answerViaKeyEvent() {
-        try {
-            // Simulate headset button press
-            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK))
-            }
-            context.sendOrderedBroadcast(downIntent, null)
-
-            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK))
-            }
-            context.sendOrderedBroadcast(upIntent, null)
-
-            GatewayLogger.info(TAG, "Call answered via key event")
-        } catch (e: Exception) {
-            GatewayLogger.error(TAG, "Failed to answer via key event", e)
-        }
-    }
-
     override suspend fun rejectCall(): Boolean {
         return withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null || call.state != Call.STATE_RINGING) {
+                GatewayLogger.warn(TAG, "No ringing call to reject")
+                return@withContext false
+            }
             try {
-                if (_callState.value !is GsmCallState.Ringing) {
-                    GatewayLogger.warn(TAG, "No ringing call to reject")
-                    return@withContext false
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS)
-                        == PackageManager.PERMISSION_GRANTED) {
-                        telecomManager.endCall()
-                        GatewayLogger.info(TAG, "Call rejected via TelecomManager")
-                        return@withContext true
-                    }
-                }
-
-                // Fallback
-                rejectViaKeyEvent()
+                call.reject(false, null)
+                GatewayLogger.info(TAG, "Call rejected via InCallService")
                 true
             } catch (e: Exception) {
                 GatewayLogger.error(TAG, "Failed to reject call", e)
@@ -274,44 +304,19 @@ class GsmCallManagerImpl @Inject constructor(
         }
     }
 
-    private fun rejectViaKeyEvent() {
-        try {
-            val down = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENDCALL))
-            }
-            context.sendOrderedBroadcast(down, null)
-
-            val up = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENDCALL))
-            }
-            context.sendOrderedBroadcast(up, null)
-
-            GatewayLogger.info(TAG, "Call rejected via key event")
-        } catch (e: Exception) {
-            GatewayLogger.error(TAG, "Failed to reject via key event", e)
-        }
-    }
-
     override suspend fun hangupCall(): Boolean {
         return withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null) {
+                GatewayLogger.warn(TAG, "No active call to hang up")
+                return@withContext false
+            }
             try {
-                val currentState = _callState.value
-                if (currentState !is GsmCallState.Active && currentState !is GsmCallState.Dialing) {
-                    GatewayLogger.warn(TAG, "No active call to hang up")
-                    return@withContext false
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    telecomManager.endCall()
-                    GatewayLogger.info(TAG, "Call ended via TelecomManager")
-                    return@withContext true
-                }
-
-                // Legacy fallback
-                rejectViaKeyEvent()
+                call.disconnect()
+                GatewayLogger.info(TAG, "Call disconnected via InCallService")
                 true
             } catch (e: Exception) {
-                GatewayLogger.error(TAG, "Failed to hang up call", e)
+                GatewayLogger.error(TAG, "Failed to disconnect call", e)
                 false
             }
         }
@@ -326,21 +331,18 @@ class GsmCallManagerImpl @Inject constructor(
                     return@withContext false
                 }
 
+                // Set state BEFORE placing call so InCallService sees Dialing
+                _callState.value = GsmCallState.Dialing(number, simSlot)
+
                 val phoneUri = Uri.parse("tel:${Uri.encode(number)}")
-                val callIntent = Intent(Intent.ACTION_CALL, phoneUri).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    
-                    // Set SIM slot for dual SIM devices
-                    dualSimManager.getSubscriptionId(simSlot)?.let { subId ->
-                        putExtra("android.telecom.extra.PHONE_ACCOUNT_HANDLE",
-                            dualSimManager.getPhoneAccountHandle(simSlot))
+                val extras = Bundle().apply {
+                    dualSimManager.getPhoneAccountHandle(simSlot)?.let { handle ->
+                        putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                     }
                 }
 
-                _callState.value = GsmCallState.Dialing(number, simSlot)
-                context.startActivity(callIntent)
-
-                GatewayLogger.info(TAG, "Placing call to $number on SIM slot $simSlot")
+                telecomManager.placeCall(phoneUri, extras)
+                GatewayLogger.info(TAG, "Placing call to $number on SIM slot $simSlot via TelecomManager")
                 true
             } catch (e: Exception) {
                 GatewayLogger.error(TAG, "Failed to place call", e)
@@ -351,19 +353,58 @@ class GsmCallManagerImpl @Inject constructor(
     }
 
     override suspend fun holdCall(): Boolean {
-        // Holding calls requires InCallService which needs to be the default dialer
-        GatewayLogger.warn(TAG, "Hold call not implemented - requires InCallService")
-        return false
+        return withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null || call.state != Call.STATE_ACTIVE) {
+                GatewayLogger.warn(TAG, "No active call to hold")
+                return@withContext false
+            }
+            try {
+                call.hold()
+                GatewayLogger.info(TAG, "Call held via InCallService")
+                true
+            } catch (e: Exception) {
+                GatewayLogger.error(TAG, "Failed to hold call", e)
+                false
+            }
+        }
     }
 
     override suspend fun resumeCall(): Boolean {
-        GatewayLogger.warn(TAG, "Resume call not implemented - requires InCallService")
-        return false
+        return withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null || call.state != Call.STATE_HOLDING) {
+                GatewayLogger.warn(TAG, "No held call to resume")
+                return@withContext false
+            }
+            try {
+                call.unhold()
+                GatewayLogger.info(TAG, "Call resumed via InCallService")
+                true
+            } catch (e: Exception) {
+                GatewayLogger.error(TAG, "Failed to resume call", e)
+                false
+            }
+        }
     }
 
     override suspend fun sendDtmf(digits: String) {
-        // DTMF sending requires InCallService
-        GatewayLogger.warn(TAG, "Send DTMF not implemented - requires InCallService")
+        withContext(Dispatchers.Main) {
+            val call = InCallServiceConnection.activeCall.value
+            if (call == null || call.state != Call.STATE_ACTIVE) {
+                GatewayLogger.warn(TAG, "No active call to send DTMF")
+                return@withContext
+            }
+            try {
+                for (digit in digits) {
+                    call.playDtmfTone(digit)
+                    call.stopDtmfTone()
+                }
+                GatewayLogger.info(TAG, "DTMF sent via InCallService: $digits")
+            } catch (e: Exception) {
+                GatewayLogger.error(TAG, "Failed to send DTMF", e)
+            }
+        }
     }
 
     override fun updateCallState(state: GsmCallState) {
@@ -372,6 +413,65 @@ class GsmCallManagerImpl @Inject constructor(
 
     override fun updateSignalStrength(dbm: Int) {
         _signalStrengthDbm.value = dbm
+    }
+
+    // ========== USSD ==========
+
+    override suspend fun sendUssdRequest(code: String, simSlot: Int): Boolean {
+        return withContext(Dispatchers.Main) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                GatewayLogger.error(TAG, "Missing CALL_PHONE permission for USSD")
+                _ussdState.value = UssdState.Error(code, "Missing CALL_PHONE permission")
+                return@withContext false
+            }
+
+            _ussdState.value = UssdState.Sending(code)
+            GatewayLogger.info(TAG, "Sending USSD request: $code on SIM $simSlot")
+
+            try {
+                val tm = dualSimManager.getSubscriptionId(simSlot)?.let { subId ->
+                    telephonyManager.createForSubscriptionId(subId)
+                } ?: telephonyManager
+
+                val callback = object : TelephonyManager.UssdResponseCallback() {
+                    override fun onReceiveUssdResponse(
+                        telephonyManager: TelephonyManager,
+                        request: String,
+                        response: CharSequence
+                    ) {
+                        GatewayLogger.info(TAG, "USSD response for $request: $response")
+                        _ussdState.value = UssdState.Response(request, response.toString())
+                    }
+
+                    override fun onReceiveUssdResponseFailed(
+                        telephonyManager: TelephonyManager,
+                        request: String,
+                        failureCode: Int
+                    ) {
+                        val reason = when (failureCode) {
+                            TelephonyManager.USSD_RETURN_FAILURE -> "Network error"
+                            TelephonyManager.USSD_ERROR_SERVICE_UNAVAIL -> "Service unavailable"
+                            else -> "Unknown error ($failureCode)"
+                        }
+                        GatewayLogger.error(TAG, "USSD failed for $request: $reason")
+                        _ussdState.value = UssdState.Error(request, reason)
+                    }
+                }
+
+                tm.sendUssdRequest(code, callback, mainHandler)
+                true
+            } catch (e: Exception) {
+                GatewayLogger.error(TAG, "Failed to send USSD request", e)
+                _ussdState.value = UssdState.Error(code, e.message ?: "Unknown error")
+                false
+            }
+        }
+    }
+
+    override fun dismissUssd() {
+        _ussdState.value = UssdState.Idle
     }
 
     companion object {

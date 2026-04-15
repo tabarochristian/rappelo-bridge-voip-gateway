@@ -105,7 +105,15 @@ interface SipEngine {
     suspend fun transferCall(callId: Int, targetUri: String): Boolean
 
     /** Get conference bridge port for audio routing */
-    fun getConfPort(callId: Int): Int
+    suspend fun getConfPort(callId: Int): Int
+
+    /** Set up the audio bridge: switch PJSIP to a null audio device, create
+     *  a bridge AudioMediaPort, and connect it bidirectionally to the SIP
+     *  call's conference slot.  Returns true on success. */
+    suspend fun connectAudioBridge(callId: Int, bridge: SipAudioBridge): Boolean
+
+    /** Disconnect and delete the bridge AudioMediaPort created by [connectAudioBridge]. */
+    suspend fun disconnectAudioBridge()
 
     /** Set call callback listener */
     fun setCallListener(listener: SipCallListener?)

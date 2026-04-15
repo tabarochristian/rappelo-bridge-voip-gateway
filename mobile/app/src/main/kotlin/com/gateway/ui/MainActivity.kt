@@ -7,6 +7,9 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -45,6 +48,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var permissionButton: Button
     private lateinit var logsRecyclerView: RecyclerView
     private lateinit var logAdapter: LogAdapter
+    private lateinit var activeCallCard: MaterialCardView
+    private lateinit var activeCallNumberText: TextView
+    private lateinit var activeCallStateText: TextView
+    private lateinit var activeCallDurationText: TextView
+    private lateinit var hangupButton: MaterialButton
+    private lateinit var dialerFab: FloatingActionButton
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -67,6 +76,23 @@ class MainActivity : AppCompatActivity() {
         setupClickListeners()
         observeViewModel()
         checkPermissions()
+        handleUssdIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleUssdIntent(intent)
+    }
+
+    private fun handleUssdIntent(intent: Intent?) {
+        val ussdCode = intent?.getStringExtra("ussd_code")
+        if (!ussdCode.isNullOrEmpty()) {
+            val dialerIntent = Intent(this, DialerPadActivity::class.java).apply {
+                putExtra("ussd_code", ussdCode)
+            }
+            startActivity(dialerIntent)
+            intent?.removeExtra("ussd_code")
+        }
     }
 
     private fun initViews() {
@@ -78,6 +104,12 @@ class MainActivity : AppCompatActivity() {
         stopButton = findViewById(R.id.stopButton)
         permissionButton = findViewById(R.id.permissionButton)
         logsRecyclerView = findViewById(R.id.logsRecyclerView)
+        activeCallCard = findViewById(R.id.activeCallCard)
+        activeCallNumberText = findViewById(R.id.activeCallNumberText)
+        activeCallStateText = findViewById(R.id.activeCallStateText)
+        activeCallDurationText = findViewById(R.id.activeCallDurationText)
+        hangupButton = findViewById(R.id.hangupButton)
+        dialerFab = findViewById(R.id.ussdFab)
 
         logAdapter = LogAdapter()
         logsRecyclerView.apply {
@@ -96,6 +128,14 @@ class MainActivity : AppCompatActivity() {
 
         stopButton.setOnClickListener {
             stopGatewayService()
+        }
+
+        hangupButton.setOnClickListener {
+            viewModel.hangupActiveCall()
+        }
+
+        dialerFab.setOnClickListener {
+            startActivity(Intent(this, DialerPadActivity::class.java))
         }
 
         permissionButton.setOnClickListener {
@@ -144,6 +184,23 @@ class MainActivity : AppCompatActivity() {
 
         startButton.isEnabled = !state.isServiceRunning && state.hasAllPermissions
         stopButton.isEnabled = state.isServiceRunning
+
+        // Active call card
+        if (state.activeCallNumber != null && state.activeCallState != null) {
+            activeCallCard.visibility = View.VISIBLE
+            activeCallNumberText.text = state.activeCallNumber
+            activeCallStateText.text = state.activeCallState
+            if (state.activeCallState == "Active") {
+                val m = state.activeCallDurationSec / 60
+                val s = state.activeCallDurationSec % 60
+                activeCallDurationText.text = String.format("%02d:%02d", m, s)
+                activeCallDurationText.visibility = View.VISIBLE
+            } else {
+                activeCallDurationText.visibility = View.GONE
+            }
+        } else {
+            activeCallCard.visibility = View.GONE
+        }
     }
 
     private fun checkPermissions() {

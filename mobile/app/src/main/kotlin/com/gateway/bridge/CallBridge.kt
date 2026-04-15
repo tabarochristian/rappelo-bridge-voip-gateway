@@ -10,6 +10,7 @@ import com.gateway.queue.model.QueueStatus
 import com.gateway.telephony.gsm.EndReason
 import com.gateway.telephony.gsm.GsmCallManager
 import com.gateway.telephony.gsm.GsmCallState
+import com.gateway.telephony.gsm.InCallServiceConnection
 import com.gateway.telephony.sip.SipAudioBridge
 import com.gateway.telephony.sip.SipCallListener
 import com.gateway.telephony.sip.SipCallState
@@ -17,10 +18,12 @@ import com.gateway.telephony.sip.SipDisconnectReason
 import com.gateway.telephony.sip.SipEngine
 import com.gateway.telephony.sip.SipRegistrationState
 import com.gateway.util.GatewayLogger
+import android.telecom.CallAudioState
 import com.gateway.util.NetworkMonitor
 import com.gateway.util.WakeLockManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,11 +75,18 @@ class CallBridgeImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val sessions = mutableMapOf<String, BridgeSession>()
+    private var initialized = false
+    private var gsmObserverJob: Job? = null
     
     private val _activeSessions = MutableStateFlow<List<BridgeSession>>(emptyList())
     override val activeSessions: StateFlow<List<BridgeSession>> = _activeSessions.asStateFlow()
 
     override suspend fun initialize() {
+        if (initialized) {
+            GatewayLogger.warn(TAG, "CallBridge already initialized, skipping")
+            return
+        }
+        initialized = true
         GatewayLogger.info(TAG, "Initializing CallBridge")
         
         // Set SIP call listener
@@ -106,7 +116,8 @@ class CallBridgeImpl @Inject constructor(
     }
 
     private fun observeGsmCalls() {
-        scope.launch {
+        gsmObserverJob?.cancel()
+        gsmObserverJob = scope.launch {
             gsmCallManager.callState.collectLatest { state ->
                 handleGsmCallStateChange(state)
             }
@@ -128,6 +139,8 @@ class CallBridgeImpl @Inject constructor(
                 // Check if there's a pending bridge session
                 val session = findSessionByGsmCaller(state.callerId)
                 if (session != null && session.state == BridgeSessionState.PENDING_GSM_ANSWER) {
+                    // Atomically transition to prevent double processing
+                    session.state = BridgeSessionState.CONNECTED
                     handleGsmCallAnswered(session, state)
                 }
             }
@@ -258,7 +271,6 @@ class CallBridgeImpl @Inject constructor(
         // Connect audio bridge
         connectAudio(session)
         
-        session.state = BridgeSessionState.CONNECTED
         session.connectedTime = System.currentTimeMillis()
         updateActiveSessions()
         
@@ -271,16 +283,22 @@ class CallBridgeImpl @Inject constructor(
         GatewayLogger.info(TAG, "Connecting audio for session ${session.sessionId}")
         
         try {
-            // Request audio focus
-            audioRouter.requestAudioFocus()
+            // Route GSM call to speaker for acoustic bridge (mic picks up speaker output)
+            InCallServiceConnection.setAudioRoute(CallAudioState.ROUTE_SPEAKER)
+
+            // Wire up PJSIP: null audio device + AudioMediaPort ↔ conf bridge
+            val connected = sipEngine.connectAudioBridge(sipCallId, sipAudioBridge)
+            if (!connected) {
+                GatewayLogger.error(TAG, "Failed to connect audio bridge to SIP call")
+                return
+            }
+
+            // Start acoustic audio bridge:
+            // AudioRecord captures GSM downlink from speaker → SIP
+            // AudioTrack plays SIP audio through speaker → mic → GSM uplink
+            sipAudioBridge.startStreaming()
             
-            // Get SIP conference port
-            val confPort = sipEngine.getConfPort(sipCallId)
-            
-            // Start audio bridge
-            sipAudioBridge.startBridge(confPort)
-            
-            GatewayLogger.info(TAG, "Audio connected for session ${session.sessionId}")
+            GatewayLogger.info(TAG, "Audio bridge connected for session ${session.sessionId}")
             
         } catch (e: Exception) {
             GatewayLogger.error(TAG, "Failed to connect audio", e)
@@ -293,11 +311,14 @@ class CallBridgeImpl @Inject constructor(
         GatewayLogger.info(TAG, "Ending bridge session $sessionId")
         
         try {
-            // Stop audio bridge
+            // Stop Android audio streaming
             sipAudioBridge.stopBridge()
-            
-            // Abandon audio focus
-            audioRouter.abandonAudioFocus()
+
+            // Restore earpiece
+            InCallServiceConnection.setAudioRoute(CallAudioState.ROUTE_EARPIECE)
+
+            // Delete the PJSIP bridge port (must happen on PJSIP thread)
+            sipEngine.disconnectAudioBridge()
             
             // Hang up SIP call
             session.sipCallId?.let { sipCallId ->

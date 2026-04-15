@@ -16,6 +16,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
+/**
+ * Legacy broadcast receiver for phone state changes.
+ * When InCallService is bound (app is default dialer), ALL call state management
+ * is handled by GatewayInCallService → InCallServiceConnection → GsmCallManagerImpl.
+ * This receiver only logs events as a diagnostic aid when InCallService is active.
+ */
 class GsmStateReceiver : BroadcastReceiver() {
 
     @EntryPoint
@@ -42,6 +48,14 @@ class GsmStateReceiver : BroadcastReceiver() {
         gsmCallManager = entryPoint.gsmCallManager()
         callQueue = entryPoint.callQueue()
         dualSimManager = entryPoint.dualSimManager()
+
+        // When InCallService is bound, it is the sole authority for call state.
+        // Do NOT call updateCallState() — it would race with InCallService events.
+        if (InCallServiceConnection.isServiceBound.value) {
+            val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: action
+            GatewayLogger.debug(TAG, "Received $state (InCallService active, ignoring)")
+            return
+        }
 
         GatewayLogger.debug(TAG, "Received action: $action")
 

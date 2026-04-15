@@ -36,6 +36,16 @@ enum class EndReason {
 }
 
 /**
+ * USSD session state
+ */
+sealed class UssdState {
+    object Idle : UssdState()
+    data class Sending(val code: String) : UssdState()
+    data class Response(val code: String, val message: String) : UssdState()
+    data class Error(val code: String, val errorMessage: String) : UssdState()
+}
+
+/**
  * Interface for managing GSM calls
  */
 interface GsmCallManager {
@@ -107,4 +117,22 @@ interface GsmCallManager {
      * Update signal strength (called by telephony callback)
      */
     fun updateSignalStrength(dbm: Int)
+
+    // ========== USSD ==========
+
+    /** Current USSD session state */
+    val ussdState: StateFlow<UssdState>
+
+    /**
+     * Send a USSD request (e.g. *123#, *100#)
+     * @param code The USSD code to send
+     * @param simSlot The SIM slot to use
+     * @return true if the request was initiated
+     */
+    suspend fun sendUssdRequest(code: String, simSlot: Int = 0): Boolean
+
+    /**
+     * Cancel / dismiss the current USSD session
+     */
+    fun dismissUssd()
 }
